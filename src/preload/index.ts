@@ -21,9 +21,13 @@ export const electronAPI = {
   renameFile: (fileId: string, newName: string, isDemo?: boolean) => 
     ipcRenderer.invoke('gdrive:rename-file', { fileId, newName, isDemo }),
 
-  // System
+  // System & Config
   restartApp: () => 
     ipcRenderer.invoke('app:restart'),
+  saveConfig: (data: { apiConfig?: any; renameConfig?: any }) =>
+    ipcRenderer.invoke('config:save', data),
+  getConfig: () =>
+    ipcRenderer.invoke('config:get'),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

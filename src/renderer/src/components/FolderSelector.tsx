@@ -7,7 +7,8 @@ import {
   CheckCheck, 
   Filter, 
   Video,
-  FileCheck2
+  FileCheck2,
+  Zap
 } from 'lucide-react';
 import { DriveFolder, DriveFile } from '../types';
 
@@ -24,6 +25,9 @@ interface FolderSelectorProps {
   onBatchAnalyze: () => void;
   onBatchRename: () => void;
   isProcessing: boolean;
+  autoRenameAfterScan?: boolean;
+  onToggleAutoRename?: (val: boolean) => void;
+  onOpenRenamedList?: () => void;
 }
 
 export const FolderSelector: React.FC<FolderSelectorProps> = ({
@@ -39,10 +43,14 @@ export const FolderSelector: React.FC<FolderSelectorProps> = ({
   onBatchAnalyze,
   onBatchRename,
   isProcessing,
+  autoRenameAfterScan = true,
+  onToggleAutoRename,
+  onOpenRenamedList,
 }) => {
   const selectedVideosCount = videos.filter(v => v.selected).length;
   const readyToRenameCount = videos.filter(v => v.selected && v.status === 'ready').length;
   const completedCount = videos.filter(v => v.status === 'renamed').length;
+  const totalProcessedCount = videos.filter(v => v.status === 'renamed' || v.status === 'ready').length;
   const [customFolderInput, setCustomFolderInput] = React.useState('');
   const [showDirectInput, setShowDirectInput] = React.useState(false);
 
@@ -163,10 +171,37 @@ export const FolderSelector: React.FC<FolderSelectorProps> = ({
             <FileCheck2 className="w-3.5 h-3.5 text-emerald-400" />
             <span>Đã đổi tên Drive: <strong className="text-emerald-300">{completedCount}</strong></span>
           </div>
+
+          {/* View / Copy Hub shortcut */}
+          {onOpenRenamedList && totalProcessedCount > 0 && (
+            <button
+              onClick={onOpenRenamedList}
+              className="px-3 py-1.5 rounded-lg bg-cyan-950/40 hover:bg-cyan-900/50 border border-cyan-500/40 text-xs font-semibold text-cyan-300 flex items-center gap-1.5 transition-all shadow-sm"
+              title="Mở bảng sao chép danh sách tên (1. ..., 2. ...)"
+            >
+              <span>📋 Sao Chép Tên ({totalProcessedCount})</span>
+            </button>
+          )}
         </div>
 
-        {/* Batch Actions */}
+        {/* Batch Actions & Auto-Rename Switch */}
         <div className="flex items-center gap-3">
+          {/* Quick Auto-rename Toggle */}
+          {onToggleAutoRename && (
+            <label className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-950/30 border border-emerald-500/40 text-xs text-emerald-300 cursor-pointer hover:bg-emerald-950/50 transition-all select-none shadow-sm">
+              <input
+                type="checkbox"
+                checked={autoRenameAfterScan}
+                onChange={(e) => onToggleAutoRename(e.target.checked)}
+                className="rounded border-slate-700 bg-slate-800 text-emerald-500 focus:ring-emerald-400 w-4 h-4 cursor-pointer accent-emerald-500"
+              />
+              <span className="font-semibold flex items-center gap-1">
+                <Zap className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" />
+                Tự đổi tên khi quét xong
+              </span>
+            </label>
+          )}
+
           {/* Analyze with AI button */}
           <button
             onClick={onBatchAnalyze}

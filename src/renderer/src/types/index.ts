@@ -31,6 +31,7 @@ export interface RenameConfig {
   prefix: string;
   maxWords: number;
   contextHint: string;
+  autoRenameAfterScan?: boolean;
 }
 
 export interface ApiConfig {

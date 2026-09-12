@@ -16,6 +16,8 @@ interface HeaderProps {
   isDriveAuth: boolean;
   onOpenApiConfig: () => void;
   onOpenRenameSettings: () => void;
+  onOpenRenamedList: () => void;
+  renamedCount: number;
   onToggleDemoMode: () => void;
   onLoginGoogle: () => void;
   onRestartApp?: () => void;
@@ -26,6 +28,8 @@ export const Header: React.FC<HeaderProps> = ({
   isDriveAuth,
   onOpenApiConfig,
   onOpenRenameSettings,
+  onOpenRenamedList,
+  renamedCount,
   onToggleDemoMode,
   onLoginGoogle,
   onRestartApp,
@@ -104,6 +108,21 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Right Actions */}
       <div className="flex items-center gap-2">
+        {/* Renamed List & Copy Hub Button */}
+        <button
+          onClick={onOpenRenamedList}
+          className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-cyan-950/40 hover:bg-cyan-900/40 text-cyan-300 border border-cyan-500/40 flex items-center gap-2 transition-all shadow-sm"
+          title="Xem và sao chép toàn bộ danh sách tên video đã xử lý"
+        >
+          <span className="font-mono text-xs">📋</span>
+          <span>Danh Sách Tên</span>
+          {renamedCount > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-cyan-500/30 text-cyan-200 font-bold">
+              {renamedCount}
+            </span>
+          )}
+        </button>
+
         <button
           onClick={onOpenRenameSettings}
           className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 border border-slate-700 flex items-center gap-2 transition-all hover:border-slate-600 shadow-sm"

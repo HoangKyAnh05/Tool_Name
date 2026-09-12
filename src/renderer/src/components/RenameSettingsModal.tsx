@@ -95,6 +95,26 @@ export const RenameSettingsModal: React.FC<RenameSettingsModalProps> = ({
             </div>
           </div>
 
+          {/* Auto Rename Toggle */}
+          <div className="p-3.5 rounded-xl bg-gradient-to-r from-emerald-950/30 to-teal-950/30 border border-emerald-500/30">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.autoRenameAfterScan ?? true}
+                onChange={(e) => setFormData({ ...formData, autoRenameAfterScan: e.target.checked })}
+                className="rounded border-slate-700 bg-slate-800 text-emerald-500 focus:ring-emerald-400 w-4 h-4 cursor-pointer"
+              />
+              <div>
+                <div className="font-semibold text-emerald-300 flex items-center gap-1.5">
+                  <span>⚡ Tự động đổi tên ngay sau khi AI quét xong (Không cần bấm xác nhận)</span>
+                </div>
+                <div className="text-[11px] text-slate-400 mt-0.5">
+                  AI quét xong video nào sẽ tự động cập nhật tên mới lên Google Drive ngay lập tức cho video đó.
+                </div>
+              </div>
+            </label>
+          </div>
+
           {/* Context Hint / Topic Suggestion */}
           <div>
             <label className="block text-slate-200 font-semibold mb-1.5">

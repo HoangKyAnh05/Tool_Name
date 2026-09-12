@@ -223,23 +223,34 @@ export const VideoTable: React.FC<VideoTableProps> = ({
                   {/* Actions */}
                   <td className="py-4 px-4 text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      {isReady ? (
+                      {isRenaming ? (
+                        <button
+                          disabled
+                          title="Đang đổi tên trên Google Drive..."
+                          className="p-2 rounded-lg bg-purple-600/20 text-purple-300 border border-purple-500/40 cursor-wait"
+                        >
+                          <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+                        </button>
+                      ) : isReady ? (
                         <button
                           onClick={() => onRenameSingle(file)}
-                          disabled={isProcessing}
                           title="Đổi tên ngay trên Google Drive"
-                          className="p-2 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 transition-all"
+                          className="p-2 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/40 transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-sm shadow-emerald-950/40"
                         >
                           <Check className="w-4 h-4" />
                         </button>
                       ) : !isRenamed ? (
                         <button
                           onClick={() => onAnalyzeSingle(file)}
-                          disabled={isProcessing || isAnalyzing}
+                          disabled={isAnalyzing}
                           title="Phân tích và sinh tên bằng AI"
-                          className="p-2 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 transition-all disabled:opacity-40"
+                          className="p-2 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 transition-all hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                         >
-                          <Sparkles className="w-4 h-4" />
+                          {isAnalyzing ? (
+                            <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                          ) : (
+                            <Sparkles className="w-4 h-4" />
+                          )}
                         </button>
                       ) : null}
 

@@ -4,6 +4,7 @@ import { FolderSelector } from './components/FolderSelector';
 import { VideoTable } from './components/VideoTable';
 import { RenameSettingsModal } from './components/RenameSettingsModal';
 import { ApiConfigModal } from './components/ApiConfigModal';
+import { RenamedListModal, RenamedItemHistory } from './components/RenamedListModal';
 import { ProcessLogs } from './components/ProcessLogs';
 import { DriveFile, DriveFolder, RenameConfig, ApiConfig, LogEntry } from './types';
 import { extractVideoFrames } from './utils/frame-extractor';
@@ -28,6 +29,7 @@ const DEFAULT_RENAME_CONFIG: RenameConfig = {
   prefix: '',
   maxWords: 8,
   contextHint: 'Video đánh cầu lông (đơn nam, đôi nam, giao lưu, tập luyện...)',
+  autoRenameAfterScan: true,
 };
 
 export const App: React.FC = () => {
@@ -40,11 +42,6 @@ export const App: React.FC = () => {
         return {
           ...DEFAULT_API_CONFIG,
           ...parsed,
-          googleClientId: DEFAULT_API_CONFIG.googleClientId,
-          googleClientSecret: DEFAULT_API_CONFIG.googleClientSecret,
-          geminiApiKey: DEFAULT_API_CONFIG.geminiApiKey,
-          geminiModel: DEFAULT_API_CONFIG.geminiModel,
-          isDemoMode: false,
         };
       } catch (e) {
         return DEFAULT_API_CONFIG;
@@ -61,6 +58,7 @@ export const App: React.FC = () => {
         return {
           ...DEFAULT_RENAME_CONFIG,
           ...parsed,
+          autoRenameAfterScan: parsed.autoRenameAfterScan ?? true,
           includeDate: parsed.includeDate ?? false,
           includeIndex: parsed.includeIndex ?? true,
           indexFormat: parsed.indexFormat ?? '1.',
@@ -77,6 +75,7 @@ export const App: React.FC = () => {
   // UI States
   const [isApiModalOpen, setIsApiModalOpen] = useState(false);
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
+  const [isRenamedListModalOpen, setIsRenamedListModalOpen] = useState(false);
   const [isDriveAuth, setIsDriveAuth] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isLoadingFolders, setIsLoadingFolders] = useState(false);
@@ -88,6 +87,41 @@ export const App: React.FC = () => {
   const [videos, setVideos] = useState<DriveFile[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [renamedHistory, setRenamedHistory] = useState<RenamedItemHistory[]>(() => {
+    const saved = localStorage.getItem('gdrive_ai_renamed_history');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  const recordRenamedItem = (originalName: string, newName: string, summary?: string) => {
+    const newItem: RenamedItemHistory = {
+      id: Math.random().toString(36).substring(2, 9),
+      originalName,
+      newName,
+      timestamp: new Date().toLocaleTimeString('vi-VN'),
+      summary,
+    };
+    setRenamedHistory((prev) => {
+      const filtered = prev.filter((item) => item.newName !== newName);
+      const updated = [newItem, ...filtered];
+      localStorage.setItem('gdrive_ai_renamed_history', JSON.stringify(updated));
+      (window as any).electronAPI?.saveConfig({ renamedHistory: updated });
+      return updated;
+    });
+  };
+
+  const handleClearHistory = () => {
+    setRenamedHistory([]);
+    localStorage.removeItem('gdrive_ai_renamed_history');
+    (window as any).electronAPI?.saveConfig({ renamedHistory: [] });
+    addLog('info', 'Đã xóa toàn bộ lịch sử tên video đã lưu.');
+  };
 
   // Log Helper
   const addLog = (type: LogEntry['type'], message: string) => {
@@ -106,15 +140,37 @@ export const App: React.FC = () => {
     addLog('info', `Khởi động ứng dụng. Chế độ: ${apiConfig.isDemoMode ? 'Sandbox Demo' : 'Trực tiếp Google Cloud'}.`);
     
     const initApp = async () => {
-      if (!apiConfig.isDemoMode) {
-        if (apiConfig.geminiApiKey) {
-          (window as any).electronAPI?.initGemini(apiConfig.geminiApiKey, apiConfig.geminiModel);
+      let currentApiConfig = apiConfig;
+      
+      // Attempt to load from persistent electron file storage if available
+      try {
+        const stored = await (window as any).electronAPI?.getConfig();
+        if (stored?.success && stored.config) {
+          if (stored.config.apiConfig) {
+            currentApiConfig = { ...currentApiConfig, ...stored.config.apiConfig };
+            setApiConfig(currentApiConfig);
+            localStorage.setItem('gdrive_ai_api_config', JSON.stringify(currentApiConfig));
+          }
+          if (stored.config.renameConfig) {
+            setRenameConfig((prev) => ({ ...prev, ...stored.config.renameConfig }));
+            localStorage.setItem('gdrive_ai_rename_config', JSON.stringify(stored.config.renameConfig));
+          }
+          if (stored.config.renamedHistory && Array.isArray(stored.config.renamedHistory)) {
+            setRenamedHistory(stored.config.renamedHistory);
+            localStorage.setItem('gdrive_ai_renamed_history', JSON.stringify(stored.config.renamedHistory));
+          }
         }
-        if (apiConfig.googleClientId && apiConfig.googleClientSecret) {
+      } catch (e) {}
+
+      if (!currentApiConfig.isDemoMode) {
+        if (currentApiConfig.geminiApiKey) {
+          (window as any).electronAPI?.initGemini(currentApiConfig.geminiApiKey, currentApiConfig.geminiModel);
+        }
+        if (currentApiConfig.googleClientId && currentApiConfig.googleClientSecret) {
           try {
             const authRes = await (window as any).electronAPI?.initGoogleAuth(
-              apiConfig.googleClientId,
-              apiConfig.googleClientSecret
+              currentApiConfig.googleClientId,
+              currentApiConfig.googleClientSecret
             );
             if (authRes?.autoLoggedIn) {
               setIsDriveAuth(true);
@@ -173,18 +229,39 @@ export const App: React.FC = () => {
   };
 
   // Save Configs
-  const handleSaveApiConfig = (newConfig: ApiConfig) => {
+  const handleSaveApiConfig = async (newConfig: ApiConfig) => {
     setApiConfig(newConfig);
     localStorage.setItem('gdrive_ai_api_config', JSON.stringify(newConfig));
+    try {
+      await (window as any).electronAPI?.saveConfig({ apiConfig: newConfig });
+    } catch (e) {}
+
     addLog('success', 'Đã lưu cấu hình API & Kết nối mới.');
-    if (!newConfig.isDemoMode && newConfig.geminiApiKey) {
-      (window as any).electronAPI?.initGemini(newConfig.geminiApiKey, newConfig.geminiModel);
+    if (!newConfig.isDemoMode) {
+      if (newConfig.geminiApiKey) {
+        (window as any).electronAPI?.initGemini(newConfig.geminiApiKey, newConfig.geminiModel);
+      }
+      if (newConfig.googleClientId && newConfig.googleClientSecret) {
+        try {
+          const authRes = await (window as any).electronAPI?.initGoogleAuth(
+            newConfig.googleClientId,
+            newConfig.googleClientSecret
+          );
+          if (authRes?.autoLoggedIn) {
+            setIsDriveAuth(true);
+            addLog('success', 'Tự động khôi phục phiên đăng nhập Google Drive.');
+          }
+        } catch (e) {}
+      }
     }
   };
 
-  const handleSaveRenameConfig = (newConfig: RenameConfig) => {
+  const handleSaveRenameConfig = async (newConfig: RenameConfig) => {
     setRenameConfig(newConfig);
     localStorage.setItem('gdrive_ai_rename_config', JSON.stringify(newConfig));
+    try {
+      await (window as any).electronAPI?.saveConfig({ renameConfig: newConfig });
+    } catch (e) {}
     addLog('success', 'Đã cập nhật quy tắc đặt tên video mới.');
   };
 
@@ -243,19 +320,85 @@ export const App: React.FC = () => {
       });
 
       if (res?.success && res.data) {
-        setVideos((prev) =>
-          prev.map((v) =>
-            v.id === file.id
-              ? {
-                  ...v,
-                  status: 'ready',
-                  proposedName: res.data.proposedName,
-                  summary: res.data.summary,
-                }
-              : v
-          )
-        );
-        addLog('success', `Đã sinh tên mới cho "${file.name}" ➔ "${res.data.proposedName}"`);
+        const proposedName = res.data.proposedName;
+        const summary = res.data.summary;
+
+        if (renameConfig.autoRenameAfterScan ?? true) {
+          // Immediately rename on Google Drive without requiring manual confirmation
+          setVideos((prev) =>
+            prev.map((v) =>
+              v.id === file.id
+                ? {
+                    ...v,
+                    status: 'renaming',
+                    proposedName,
+                    summary,
+                  }
+                : v
+            )
+          );
+          addLog('info', `⚡ [Tự động đổi tên] Đang cập nhật tên trên Drive: "${file.name}" ➔ "${proposedName}"...`);
+
+          try {
+            const renameRes = await (window as any).electronAPI?.renameFile(
+              file.id,
+              proposedName,
+              apiConfig.isDemoMode
+            );
+
+            if (renameRes?.success) {
+              setVideos((prev) =>
+                prev.map((v) =>
+                  v.id === file.id
+                    ? {
+                        ...v,
+                        status: 'renamed',
+                        name: proposedName,
+                        proposedName,
+                        summary,
+                        selected: false,
+                      }
+                    : v
+                )
+              );
+              recordRenamedItem(file.name, proposedName, summary);
+              addLog('success', `✅ [Tự động đổi tên] Đã đổi tên thành công: "${proposedName}"`);
+            } else {
+              throw new Error(renameRes?.error || 'Lỗi khi gọi Google Drive API');
+            }
+          } catch (renameErr: any) {
+            setVideos((prev) =>
+              prev.map((v) =>
+                v.id === file.id
+                  ? {
+                      ...v,
+                      status: 'error',
+                      proposedName,
+                      summary,
+                      errorMsg: `Đã sinh tên nhưng lỗi khi đổi tên Drive: ${renameErr.message}`,
+                    }
+                  : v
+              )
+            );
+            addLog('error', `Không thể đổi tên Drive cho "${file.name}": ${renameErr.message}`);
+          }
+        } else {
+          // Keep as ready for manual confirmation
+          setVideos((prev) =>
+            prev.map((v) =>
+              v.id === file.id
+                ? {
+                    ...v,
+                    status: 'ready',
+                    proposedName,
+                    summary,
+                  }
+                : v
+            )
+          );
+          recordRenamedItem(file.name, proposedName, summary);
+          addLog('success', `Đã sinh tên mới cho "${file.name}" ➔ "${proposedName}"`);
+        }
       } else {
         throw new Error(res?.error || 'Không nhận được kết quả từ AI');
       }
@@ -286,7 +429,7 @@ export const App: React.FC = () => {
 
   // Single Rename
   const handleRenameSingle = async (file: DriveFile) => {
-    if (!file.proposedName) return;
+    if (!file.proposedName || file.status === 'renaming' || file.status === 'renamed') return;
 
     setVideos((prev) =>
       prev.map((v) => (v.id === file.id ? { ...v, status: 'renaming' } : v))
@@ -308,6 +451,7 @@ export const App: React.FC = () => {
               : v
           )
         );
+        recordRenamedItem(file.name, file.proposedName, file.summary);
         addLog('success', `Đã đổi tên thành công trên Google Drive: "${file.proposedName}"`);
       } else {
         throw new Error(res?.error || 'Lỗi khi gọi Google Drive API');
@@ -421,6 +565,8 @@ export const App: React.FC = () => {
         isDriveAuth={isDriveAuth}
         onOpenApiConfig={() => setIsApiModalOpen(true)}
         onOpenRenameSettings={() => setIsRenameModalOpen(true)}
+        onOpenRenamedList={() => setIsRenamedListModalOpen(true)}
+        renamedCount={videos.length}
         onToggleDemoMode={() =>
           handleSaveApiConfig({ ...apiConfig, isDemoMode: !apiConfig.isDemoMode })
         }
@@ -446,6 +592,9 @@ export const App: React.FC = () => {
           onBatchAnalyze={handleBatchAnalyze}
           onBatchRename={handleBatchRename}
           isProcessing={isProcessing}
+          autoRenameAfterScan={renameConfig.autoRenameAfterScan ?? true}
+          onToggleAutoRename={(val) => handleSaveRenameConfig({ ...renameConfig, autoRenameAfterScan: val })}
+          onOpenRenamedList={() => setIsRenamedListModalOpen(true)}
         />
 
         <VideoTable
@@ -475,6 +624,14 @@ export const App: React.FC = () => {
         onClose={() => setIsApiModalOpen(false)}
         config={apiConfig}
         onSave={handleSaveApiConfig}
+      />
+
+      <RenamedListModal
+        isOpen={isRenamedListModalOpen}
+        onClose={() => setIsRenamedListModalOpen(false)}
+        videos={videos}
+        history={renamedHistory}
+        onClearHistory={handleClearHistory}
       />
     </div>
   );

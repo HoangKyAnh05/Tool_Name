@@ -1,6 +1,10 @@
-import { ipcMain, app } from 'electron';
+import { ipcMain, app, BrowserWindow } from 'electron';
+import fs from 'fs';
+import path from 'path';
 import { gdriveService } from './gdrive-service';
 import { geminiService, VideoAnalysisRequest } from './gemini-service';
+
+const CONFIG_PATH = path.join(app.getPath('userData'), 'app_config.json');
 
 // Mock Data for Demo / Sandbox Mode
 const MOCK_FOLDERS = [
@@ -199,12 +203,48 @@ export function setupIpcHandlers() {
     }
   });
 
-  // App Restart
+  // App Restart / Reload
   ipcMain.handle('app:restart', async () => {
     try {
-      app.relaunch();
-      app.exit(0);
+      const windows = BrowserWindow.getAllWindows();
+      if (windows.length > 0) {
+        windows[0].webContents.reloadIgnoringCache();
+        return { success: true };
+      }
       return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  // Config Persistence
+  ipcMain.handle('config:save', async (_, { apiConfig, renameConfig }) => {
+    try {
+      let current: any = {};
+      if (fs.existsSync(CONFIG_PATH)) {
+        try {
+          current = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+        } catch (e) {}
+      }
+      const updated = {
+        ...current,
+        ...(apiConfig ? { apiConfig: { ...current.apiConfig, ...apiConfig } } : {}),
+        ...(renameConfig ? { renameConfig: { ...current.renameConfig, ...renameConfig } } : {}),
+      };
+      fs.writeFileSync(CONFIG_PATH, JSON.stringify(updated, null, 2), 'utf-8');
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('config:get', async () => {
+    try {
+      if (fs.existsSync(CONFIG_PATH)) {
+        const raw = fs.readFileSync(CONFIG_PATH, 'utf-8');
+        return { success: true, config: JSON.parse(raw) };
+      }
+      return { success: true, config: {} };
     } catch (e: any) {
       return { success: false, error: e.message };
     }
